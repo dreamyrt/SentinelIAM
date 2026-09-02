@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelIAM — RBAC & IAM Workspace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col justify-between">
+
+<!-- Тимчасовий контейнер повідомлень (Toast) -->
+<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+<!-- 1. АВТОРИЗАЦІЙНЕ ВІКНО -->
+<div id="auth-view" class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="flex justify-center mb-4">
+            <img src="/logo.png" alt="SentinelIAM Logo" class="h-16 w-16 rounded-2xl object-cover shadow-2xl border border-slate-800" onerror="this.onerror=null; this.outerHTML='<div class=\'flex justify-center text-emerald-500 text-5xl mb-4\'><i class=\\'fa-solid fa-shield-halved\\'></i></div>';">
+        </div>
+        <h2 class="text-center text-3xl font-extrabold tracking-tight text-white">SentinelIAM Dashboard</h2>
+        <p class="mt-2 text-center text-sm text-slate-400">Role-Based Access Control Console</p>
+    </div>
+
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="bg-slate-900 px-6 py-8 shadow-2xl border border-slate-800 rounded-2xl sm:px-10">
+            <!-- Крок 1: Введення логіна/пароля -->
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-slate-300">Corporate Email</label>
+                    <input id="login-email" type="email" required class="mt-1 block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-slate-300">Security Password</label>
+                    <input id="login-password" type="password" required class="mt-1 block w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors">
+                </div>
+                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-colors">
+                    Sign In
+                </button>
+            </form>
+
+            <!-- Крок 2: Challenge 2FA -->
+            <form id="mfa-form" class="hidden space-y-6">
+                <div class="text-center">
+                    <i class="fa-solid fa-key text-yellow-500 text-3xl mb-2"></i>
+                    <h3 class="text-lg font-bold text-white">Multi-Factor Authentication</h3>
+                    <p class="text-xs text-slate-400 mt-1">Enter code from Google Authenticator / Authy app</p>
+                </div>
+                <div>
+                    <label for="mfa-code" class="block text-sm font-medium text-slate-300">Verification Code</label>
+                    <input id="mfa-code" type="text" placeholder="******" maxlength="6" required class="mt-1 block text-center tracking-widest text-xl w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-yellow-500 transition-colors">
+                </div>
+                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-slate-950 bg-yellow-500 hover:bg-yellow-400 transition-colors">
+                    Verify Token
+                </button>
+            </form>
+
+            <!-- Підказка з тестовими акаунтами -->
+            <div class="mt-6 border-t border-slate-800/80 pt-4">
+                <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Test Accounts (Role / Pass)</p>
+                <div class="space-y-1 text-xs text-slate-400 code-font">
+                    <div><span class="text-emerald-400">admin@company.com</span> / Admin123! <span class="bg-red-500/10 text-red-400 text-[10px] px-1 rounded border border-red-500/20">ADMIN</span></div>
+                    <div><span class="text-emerald-400">analyst@company.com</span> / Analyst123! <span class="bg-amber-500/10 text-amber-400 text-[10px] px-1 rounded border border-amber-500/20">ANALYST</span></div>
+                    <div><span class="text-emerald-400">user@company.com</span> / User123! <span class="bg-slate-500/10 text-slate-400 text-[10px] px-1 rounded border border-slate-500/20">USER</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. РОБОЧИЙ КАБІНЕТ (WORKSPACE) -->
+<div id="workspace-view" class="hidden flex h-screen overflow-hidden">
+
+    <!-- Sidebar ліворуч -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between">
+        <div>
+            <!-- Логотип у бічному меню -->
+            <div class="p-6 border-b border-slate-800 flex items-center gap-3">
+                <img src="/logo.png" alt="Logo" class="h-8 w-8 rounded-lg object-cover border border-slate-700" onerror="this.onerror=null; this.outerHTML='<i class=\'fa-solid fa-shield-halved text-emerald-500 text-2xl\'></i>';">
+                <span class="text-lg font-extrabold tracking-tight text-white">SentinelIAM</span>
+            </div>
+
+            <!-- Профіль користувача в Sidebar -->
+            <div class="p-4 bg-slate-950/40 border-b border-slate-800 flex items-center gap-3">
+                <div class="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold" id="sidebar-user-avatar">
+                    U
+                </div>
+                <div class="overflow-hidden">
+                    <div class="text-sm font-bold text-white truncate" id="sidebar-user-name">Loading...</div>
+                    <span id="sidebar-user-role-badge" class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ring-1 ring-inset">USER</span>
+                </div>
+            </div>
+
+            <!-- Список навігації -->
+            <nav class="p-4 space-y-1">
+                <button onclick="switchTab('profile')" id="nav-btn-profile" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors bg-slate-800 text-white">
+                    <i class="fa-solid fa-user-shield"></i> Profile & Security
+                </button>
+                <button onclick="switchTab('analytics')" id="nav-btn-analytics" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-chart-line"></i> Analytics Dashboard
+                </button>
+                <button onclick="switchTab('admin')" id="nav-btn-admin" class="hidden w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors text-slate-400 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-users-gear"></i> Access Control
+                </button>
+            </nav>
+        </div>
+
+        <!-- Вихід -->
+        <div class="p-4 border-t border-slate-800">
+            <button onclick="logout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold bg-slate-850 hover:bg-red-550 border border-slate-800 hover:border-red-600 text-slate-300 hover:text-white transition-all">
+                <i class="fa-solid fa-right-from-bracket"></i> Disconnect
+            </button>
+        </div>
+    </aside>
+
+    <!-- Основне робоче поле праворуч -->
+    <main class="flex-1 flex flex-col overflow-y-auto bg-slate-950 p-8">
+        <header class="flex justify-between items-center mb-8 pb-4 border-b border-slate-900">
+            <div>
+                <h1 class="text-2xl font-extrabold text-white" id="page-title">Workspace Security</h1>
+                <p class="text-sm text-slate-400 mt-1" id="page-description">Manage personal configurations and MFA protection.</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-xs text-slate-500 code-font bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg" id="active-user-meta">
+                    IP: Fetching...
+                </div>
+            </div>
+        </header>
+
+        <!-- ТАБИ -->
+        <!-- 2.1 Таб: Profile & Security -->
+        <section id="tab-profile-content" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Загальна інформація -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-lg font-bold text-white mb-4">Identity Verification Details</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <span class="block text-xs text-slate-400">Full Name</span>
+                            <span class="text-base font-semibold text-white" id="prof-full-name">Load...</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs text-slate-400">Email Address</span>
+                            <span class="text-base font-semibold text-white" id="prof-email">Load...</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs text-slate-400">Role Permitted</span>
+                            <span class="text-base font-semibold text-white uppercase code-font" id="prof-role">Load...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2FA Панель налаштування -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <h3 class="text-lg font-bold text-white mb-2">Two-Factor Authentication (MFA)</h3>
+                    <p class="text-xs text-slate-400 mb-4">Adds an extra layer of system security via Google Authenticator TOTP.</p>
+
+                    <div id="mfa-status-container" class="mb-4">
+                        <!-- Статус додається JS -->
+                    </div>
+
+                    <!-- Форма налаштування (активації) MFA -->
+                    <div id="mfa-setup-form" class="hidden border-t border-slate-800 pt-4 mt-4 space-y-4">
+                        <p class="text-xs text-slate-300">1. Scan this QR code or use key inside your Auth App:</p>
+                        <div class="flex justify-center p-2 bg-white rounded-lg w-40 h-40 mx-auto">
+                            <img id="mfa-qr-code" class="w-full h-full" alt="MFA Code">
+                        </div>
+                        <div class="text-center">
+                            <span class="text-xs text-slate-400">Secret Key:</span>
+                            <div class="text-xs font-mono select-all bg-slate-950 p-2 rounded border border-slate-800" id="mfa-secret-text">XXXX</div>
+                        </div>
+                        <div>
+                            <label for="mfa-activation-code" class="block text-xs text-slate-400 mb-1">2. Enter validation code to verify activation</label>
+                            <input id="mfa-activation-code" type="text" placeholder="******" class="block text-center tracking-widest text-lg w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <button onclick="confirmEnableMFA()" class="w-full py-2.5 bg-emerald-500 text-slate-950 rounded-lg font-bold hover:bg-emerald-400 transition-colors text-sm">
+                            Verify & Activate MFA
+                        </button>
+                    </div>
+
+                    <!-- Кнопка деактивації -->
+                    <div id="mfa-disable-form" class="hidden border-t border-slate-800 pt-4 mt-4 space-y-4">
+                        <div>
+                            <label for="mfa-deactivation-code" class="block text-xs text-slate-400 mb-1">Enter current code to turn off MFA:</label>
+                            <input id="mfa-deactivation-code" type="text" placeholder="******" class="block text-center tracking-widest text-lg w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-red-500">
+                        </div>
+                        <button onclick="confirmDisableMFA()" class="w-full py-2.5 bg-red-550 text-white border border-red-600 rounded-lg font-bold hover:bg-red-600 transition-colors text-sm">
+                            Disable MFA
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2.2 Таб: Analytics Dashboard (доступний ANALYST, ADMIN) -->
+        <section id="tab-analytics-content" class="hidden space-y-6">
+            <!-- Картки статистики -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-slate-400 font-semibold uppercase">System CPU Status</span>
+                        <i class="fa-solid fa-microchip text-blue-400 text-lg"></i>
+                    </div>
+                    <div class="text-2xl font-extrabold text-white" id="metric-cpu">0%</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-slate-400 font-semibold uppercase">Active IAM Sessions</span>
+                        <i class="fa-solid fa-users text-green-400 text-lg"></i>
+                    </div>
+                    <div class="text-2xl font-extrabold text-white" id="metric-sessions">0</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-slate-400 font-semibold uppercase">Threats Mitigated</span>
+                        <i class="fa-solid fa-virus-slash text-red-400 text-lg"></i>
+                    </div>
+                    <div class="text-2xl font-extrabold text-white" id="metric-threats">0</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-slate-400 font-semibold uppercase">RAM Health Status</span>
+                        <i class="fa-solid fa-memory text-purple-400 text-lg"></i>
+                    </div>
+                    <div class="text-2xl font-extrabold text-white" id="metric-ram">0%</div>
+                </div>
+            </div>
+
+            <!-- Графік безпекових подій -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold text-white">Threat Alert Dynamic (Real-Time Metrics)</h3>
+                    <button onclick="fetchMetrics()" class="px-3 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded border border-slate-700 transition-colors">
+                        <i class="fa-solid fa-arrows-rotate mr-1"></i> Update Metrics
+                    </button>
+                </div>
+                <div class="h-64">
+                    <canvas id="threatChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2.3 Таб: Access Control Center (доступний ADMIN) -->
+        <section id="tab-admin-content" class="hidden space-y-6">
+            <!-- Керування користувачами -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-lg font-bold text-white mb-4">RBAC Role Manager</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-left text-sm text-slate-300">
+                        <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 font-medium">
+                            <th class="py-3 px-4">Full Name</th>
+                            <th class="py-3 px-4">Corporate Email</th>
+                            <th class="py-3 px-4">MFA State</th>
+                            <th class="py-3 px-4">Active State</th>
+                            <th class="py-3 px-4">Assigned Role (RBAC)</th>
+                        </tr>
+                        </thead>
+                        <tbody id="user-management-rows" class="divide-y divide-slate-800">
+                        <!-- Рядки додаються JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Таблиця Аудит логів -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-white">Real-Time Security Audit Logs (SIEM View)</h3>
+                    <button onclick="fetchAuditLogs()" class="px-3 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded border border-slate-700 transition-colors">
+                        <i class="fa-solid fa-rotate mr-1"></i> Refresh Logs
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-left text-xs text-slate-300 code-font">
+                        <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 font-medium">
+                            <th class="py-3 px-4">Timestamp (UTC)</th>
+                            <th class="py-3 px-4">Target Actor</th>
+                            <th class="py-3 px-4">Action Event</th>
+                            <th class="py-3 px-4">Status</th>
+                            <th class="py-3 px-4">Client IP</th>
+                            <th class="py-3 px-4">System Details</th>
+                        </tr>
+                        </thead>
+                        <tbody id="audit-logs-rows" class="divide-y divide-slate-850">
+                        <!-- Рядки додаються JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- Новий нижній колонтитул з інформацією про розробника -->
+<footer class="bg-slate-950 py-4 text-center border-t border-slate-900 text-xs text-slate-500">
+    <div class="flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-4">
+        <span>SentinelIAM Workspace — Portfolio Project Demonstration. All activities are logged under active auditing.</span>
+        <span class="hidden sm:inline text-slate-850">|</span>
+        <span class="font-medium text-slate-400">Розроблено <span class="text-emerald-400">dreamyr</span></span>
+    </div>
+</footer>
+
+<!-- LOGIC SCRIPTS -->
+<script>
+    let currentToken = localStorage.getItem("access_token") || null;
+    let currentUserRole = localStorage.getItem("user_role") || null;
+    let tempMfaToken = null; // Для збереження кроку входу
+    let chartInstance = null; // Збереження графіку ChartJS
+
+    // ==========================================
+    // ІНІЦІАЛІЗАЦІЯ І СТАРТ
+    // ==========================================
+    document.addEventListener("DOMContentLoaded", async () => {
+        document.getElementById("active-user-meta").innerText = `Client IP: 127.0.0.1 (Local Session)`;
+        if (currentToken) {
+            await initWorkspace();
+        } else {
+            showAuthView();
+        }
+    });
+
+    function showAuthView() {
+        document.getElementById("auth-view").classList.remove("hidden");
+        document.getElementById("workspace-view").classList.add("hidden");
+        document.getElementById("login-form").classList.remove("hidden");
+        document.getElementById("mfa-form").classList.add("hidden");
+    }
+
+    // Робимо функцію асинхронною, щоб спочатку отримати профіль користувача,
+    // а вже потім малювати меню на основі реальної ролі
+    async function initWorkspace() {
+        document.getElementById("auth-view").classList.add("hidden");
+        document.getElementById("workspace-view").classList.remove("hidden");
+
+        // Гарантовано завантажуємо актуальний профіль з БД і оновлюємо ролі
+        await fetchProfile();
+
+        // Рендеримо бічне меню
+        renderSidebar();
+
+        // Відкриваємо безпечну за замовчуванням вкладку Profile
+        switchTab('profile');
+    }
+
+    // ==========================================
+    // УТИЛІТИ СИСТЕМИ (Toast Notifications)
+    // ==========================================
+    function showToast(message, type = 'success') {
+        const container = document.getElementById("toast-container");
+        const toast = document.createElement("div");
+
+        const colorClass = type === 'success'
+            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+            : (type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/30' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30');
+
+        const icon = type === 'success'
+            ? '<i class="fa-solid fa-circle-check"></i>'
+            : (type === 'error' ? '<i class="fa-solid fa-triangle-exclamation"></i>' : '<i class="fa-solid fa-circle-info"></i>');
+
+        toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl transition-all duration-300 transform translate-y-2 opacity-0 ${colorClass}`;
+        toast.innerHTML = `${icon} <span class="text-sm font-semibold">${message}</span>`;
+
+        container.appendChild(toast);
+
+        // Анімація виклику
+        setTimeout(() => {
+            toast.classList.remove('translate-y-2', 'opacity-0');
+        }, 10);
+
+        // Автовидалення за 4 секунди
+        setTimeout(() => {
+            toast.classList.add('translate-y-2', 'opacity-0');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    // ==========================================
+    // АУТЕНТИФІКАЦІЯ
+    // ==========================================
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+
+        try {
+            const response = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "Authentication Failed");
+
+            if (data.mfa_required) {
+                // Перехід до другого кроку авторизації (2FA)
+                tempMfaToken = data.temp_token;
+                document.getElementById("login-form").classList.add("hidden");
+                document.getElementById("mfa-form").classList.remove("hidden");
+                showToast("Primary check success. Requesting 2FA Code.", "warning");
+            } else {
+                // Повноцінний вхід
+                saveSession(data);
+            }
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    });
+
+    document.getElementById("mfa-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const code = document.getElementById("mfa-code").value;
+
+        try {
+            const response = await fetch("/api/auth/verify-mfa", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ temp_token: tempMfaToken, code })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "MFA validation rejected");
+
+            saveSession(data);
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    });
+
+    async function saveSession(data) {
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("user_role", data.role);
+        localStorage.setItem("user_email", data.email);
+        localStorage.setItem("user_fullname", data.full_name);
+        currentToken = data.access_token;
+        currentUserRole = data.role;
+
+        showToast("Successfully authorized. Workspace opened.");
+        await initWorkspace();
+    }
+
+    function logout() {
+        localStorage.clear();
+        currentToken = null;
+        currentUserRole = null;
+        tempMfaToken = null;
+        showToast("Disconnected successfully.");
+
+        // Надійно приховуємо елементи перед розмонтуванням
+        document.getElementById("nav-btn-analytics").classList.add("hidden");
+        document.getElementById("nav-btn-admin").classList.add("hidden");
+
+        showAuthView();
+    }
+
+    // ==========================================
+    // НАВІГАЦІЯ ТА СТИЛІ РОЛЕЙ
+    // ==========================================
+    function renderSidebar() {
+        const role = currentUserRole;
+
+        // Відображати вкладку Analytics для ANALYST та ADMIN
+        const navBtnAnalytics = document.getElementById("nav-btn-analytics");
+        if (role === 'ANALYST' || role === 'ADMIN') {
+            navBtnAnalytics.classList.remove("hidden");
+        } else {
+            navBtnAnalytics.classList.add("hidden");
+        }
+
+        // Відображати вкладку Admin для ADMIN
+        const navBtnAdmin = document.getElementById("nav-btn-admin");
+        if (role === 'ADMIN') {
+            navBtnAdmin.classList.remove("hidden");
+        } else {
+            navBtnAdmin.classList.add("hidden");
+        }
+
+        // Налаштування автарки та бейджу
+        document.getElementById("sidebar-user-name").innerText = localStorage.getItem("user_fullname") || "Loading...";
+        const avatarChar = (localStorage.getItem("user_fullname") || "U").charAt(0);
+        document.getElementById("sidebar-user-avatar").innerText = avatarChar;
+
+        const badge = document.getElementById("sidebar-user-role-badge");
+        badge.innerText = role || "USER";
+        badge.className = "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ring-1 ring-inset ";
+
+        if (role === 'ADMIN') {
+            badge.classList.add("bg-red-500/10", "text-red-400", "ring-red-500/20");
+        } else if (role === 'ANALYST') {
+            badge.classList.add("bg-amber-500/10", "text-amber-400", "ring-amber-500/20");
+        } else {
+            badge.classList.add("bg-slate-500/10", "text-slate-400", "ring-slate-500/20");
+        }
+    }
+
+    function switchTab(tabId) {
+        // КЛІЄНТСЬКИЙ КОРДОН БЕЗПЕКИ (Client-side RBAC Guard)
+        // Запобігає випадковим запитам до API та відображенню порожніх інтерфейсів
+        if (tabId === 'analytics' && currentUserRole !== 'ANALYST' && currentUserRole !== 'ADMIN') {
+            showToast("Access Denied: Restricted Tab", "error");
+            return;
+        }
+        if (tabId === 'admin' && currentUserRole !== 'ADMIN') {
+            showToast("Access Denied: Restricted Tab", "error");
+            return;
+        }
+
+        // Приховування всіх секцій
+        document.getElementById("tab-profile-content").classList.add("hidden");
+        document.getElementById("tab-analytics-content").classList.add("hidden");
+        document.getElementById("tab-admin-content").classList.add("hidden");
+
+        // Заміна класів навігаційних кнопок
+        const tabs = ['profile', 'analytics', 'admin'];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`nav-btn-${t}`);
+            if (btn) {
+                btn.className = "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors text-slate-400 hover:bg-slate-800 hover:text-white";
+            }
+        });
+
+        // Активація обраної секції та кнопки
+        document.getElementById(`tab-${tabId}-content`).classList.remove("hidden");
+        const activeBtn = document.getElementById(`nav-btn-${tabId}`);
+        if (activeBtn) {
+            activeBtn.className = "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors bg-slate-800 text-white";
+        }
+
+        // Специфічний запуск завантаження даних
+        if (tabId === 'profile') {
+            document.getElementById("page-title").innerText = "Identity & Security Settings";
+            document.getElementById("page-description").innerText = "Manage your IAM parameters and Multi-factor authorization.";
+            fetchProfile();
+        } else if (tabId === 'analytics') {
+            document.getElementById("page-title").innerText = "Real-Time Telemetry Analytics";
+            document.getElementById("page-description").innerText = "Threat detection graphs and telemetry monitoring.";
+            fetchMetrics();
+        } else if (tabId === 'admin') {
+            document.getElementById("page-title").innerText = "System IAM Orchestration Panel";
+            document.getElementById("page-description").innerText = "Review direct actions, audit logs, and manipulate RBAC mapping.";
+            fetchUserManagement();
+            fetchAuditLogs();
+        }
+    }
+
+    // Запит до захищених API
+    async function classSecureRequest(url, method = "GET", body = null) {
+        const headers = {
+            "Authorization": `Bearer ${currentToken}`
+        };
+        if (body) {
+            headers["Content-Type"] = "application/json";
+        }
+
+        const options = { method, headers };
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+
+        const res = await fetch(url, options);
+
+        if (res.status === 401) {
+            showToast("Your session expired. Please connect again.", "error");
+            logout();
+            throw new Error("Session expired");
+        }
+        if (res.status === 403) {
+            showToast("RBAC Access Violation: Resource Forbidden.", "error");
+            throw new Error("RBAC Forbidden Access");
+        }
+
+        const parsed = await res.json();
+        if (!res.ok) {
+            throw new Error(parsed.detail || "Request execution error");
+        }
+        return parsed;
+    }
+
+    // ==========================================
+    // ТАБ 1: PROFILE & SECURITY LOGIC
+    // ==========================================
+    async function fetchProfile() {
+        try {
+            const data = await classSecureRequest("/api/workspace/profile");
+            document.getElementById("prof-full-name").innerText = data.full_name;
+            document.getElementById("prof-email").innerText = data.email;
+            document.getElementById("prof-role").innerText = data.role;
+
+            // Оновлення поточної ролі у сесії
+            localStorage.setItem("user_role", data.role);
+            currentUserRole = data.role;
+
+            renderMFAState(data.is_mfa_enabled);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderMFAState(isEnabled) {
+        const container = document.getElementById("mfa-status-container");
+        const setupForm = document.getElementById("mfa-setup-form");
+        const disableForm = document.getElementById("mfa-disable-form");
+
+        setupForm.classList.add("hidden");
+        disableForm.classList.add("hidden");
+
+        if (isEnabled) {
+            container.innerHTML = `
+                <div class="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl text-sm">
+                    <i class="fa-solid fa-circle-check"></i> MFA Protection is ACTIVE
+                </div>
+                <button onclick="showDisableMFA()" class="mt-4 px-4 py-2 bg-slate-800 text-slate-300 hover:bg-red-550 border border-slate-700 hover:border-red-600 hover:text-white rounded-lg text-xs font-semibold transition-all">
+                    Disable Protection
+                </button>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="flex items-center gap-2 text-red-400 font-bold bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-xl text-sm">
+                    <i class="fa-solid fa-triangle-exclamation"></i> MFA Protection is INACTIVE
+                </div>
+                <button onclick="startMFASetup()" class="mt-4 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-lg text-xs font-bold transition-all">
+                    Activate MFA
+                </button>
+            `;
+        }
+    }
+
+    async function startMFASetup() {
+        try {
+            const data = await classSecureRequest("/api/mfa/setup", "POST");
+            document.getElementById("mfa-qr-code").src = data.qr_code;
+            document.getElementById("mfa-secret-text").innerText = data.secret;
+
+            document.getElementById("mfa-setup-form").classList.remove("hidden");
+            document.getElementById("mfa-disable-form").classList.add("hidden");
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function confirmEnableMFA() {
+        const code = document.getElementById("mfa-activation-code").value;
+        if (!code) {
+            showToast("Please enter verification 2FA code", "error");
+            return;
+        }
+        try {
+            await classSecureRequest("/api/mfa/enable", "POST", { code });
+            showToast("MFA configured and activated.");
+            await fetchProfile();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    function showDisableMFA() {
+        document.getElementById("mfa-disable-form").classList.remove("hidden");
+        document.getElementById("mfa-setup-form").classList.add("hidden");
+    }
+
+    async function confirmDisableMFA() {
+        const code = document.getElementById("mfa-deactivation-code").value;
+        if (!code) {
+            showToast("Please enter 2FA verification code", "error");
+            return;
+        }
+        try {
+            await classSecureRequest("/api/mfa/disable", "POST", { code });
+            showToast("MFA successfully deactivated.", "warning");
+            await fetchProfile();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    // ==========================================
+    // ТАБ 2: ANALYTICS (ANALYST, ADMIN)
+    // ==========================================
+    async function fetchMetrics() {
+        try {
+            const data = await classSecureRequest("/api/workspace/metrics");
+
+            // Візуальні картки метрик
+            document.getElementById("metric-cpu").innerText = `${data.cpu_usage}%`;
+            document.getElementById("metric-sessions").innerText = data.active_sessions;
+            document.getElementById("metric-threats").innerText = data.blocked_attacks;
+            document.getElementById("metric-ram").innerText = `${data.memory_usage}%`;
+
+            // Графік Chart.js
+            renderChart(data.logs_summary);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function renderChart(logsSummary) {
+        const ctx = document.getElementById('threatChart').getContext('2d');
+        const labels = logsSummary.map(item => item.time);
+        const dataValues = logsSummary.map(item => item.threats);
+
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'SIEM Threat Level Indicators',
+                    data: dataValues,
+                    borderColor: '#10b981', // emerald-500
+                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                    borderWidth: 2,
+                    tension: 0.35,
+                    fill: true,
+                    pointBackgroundColor: '#10b981',
+                    pointBorderColor: '#020617',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: { color: '#64748b', font: { family: 'JetBrains Mono' } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: { color: '#64748b', font: { family: 'JetBrains Mono' } },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // ТАБ 3: ADMIN ACCESS CONTROL PANEL
+    // ==========================================
+    async function fetchUserManagement() {
+        try {
+            const users = await classSecureRequest("/api/admin/users");
+            const tbody = document.getElementById("user-management-rows");
+            tbody.innerHTML = "";
+
+            users.forEach(u => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-850/40 transition-colors border-b border-slate-800/60";
+
+                // Генерація селектора ролей
+                let options = `
+                    <option value="USER" ${u.role === 'USER' ? 'selected' : ''}>USER</option>
+                    <option value="ANALYST" ${u.role === 'ANALYST' ? 'selected' : ''}>ANALYST</option>
+                    <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
+                `;
+
+                const mfaBadge = u.is_mfa_enabled
+                    ? `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-400 ring-1 ring-inset ring-emerald-500/20">Active</span>`
+                    : `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-1 text-xs font-semibold text-slate-400 ring-1 ring-inset ring-slate-500/20">Inactive</span>`;
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-white font-medium">${u.full_name}</td>
+                    <td class="py-3 px-4 text-slate-400 code-font">${u.email}</td>
+                    <td class="py-3 px-4">${mfaBadge}</td>
+                    <td class="py-3 px-4">
+                        <span class="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-1 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/20">Enabled</span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <select onchange="updateUserRole(${u.id}, this.value)" class="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500">
+                            ${options}
+                        </select>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function updateUserRole(userId, newRole) {
+        try {
+            const res = await classSecureRequest(`/api/admin/users/${userId}/role`, "PUT", { role: newRole });
+            showToast(res.message);
+
+            // Оновлення поточної ролі в Sidebar, якщо адмін змінив власну роль
+            await fetchProfile();
+            renderSidebar();
+
+            fetchUserManagement();
+            fetchAuditLogs();
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
+    async function fetchAuditLogs() {
+        try {
+            const logs = await classSecureRequest("/api/admin/audit-logs");
+            const tbody = document.getElementById("audit-logs-rows");
+            tbody.innerHTML = "";
+
+            logs.forEach(l => {
+                const statusColor = l.status === 'SUCCESS'
+                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                    : (l.status === 'DENIED' ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20');
+
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-850/30 transition-colors border-b border-slate-850/60";
+                tr.innerHTML = `
+                    <td class="py-2.5 px-4 text-slate-400 whitespace-nowrap">${l.timestamp}</td>
+                    <td class="py-2.5 px-4 text-slate-200">${l.email || 'Anonymous'}</td>
+                    <td class="py-2.5 px-4 text-emerald-400 font-semibold">${l.action}</td>
+                    <td class="py-2.5 px-4">
+                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-extrabold ${statusColor}">${l.status}</span>
+                    </td>
+                    <td class="py-2.5 px-4 text-slate-400">${l.ip_address}</td>
+                    <td class="py-2.5 px-4 text-slate-400 max-w-xs truncate" title="${l.details}">${l.details}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error(err);
+        }
+    }
+</script>
+</body>
+</html>

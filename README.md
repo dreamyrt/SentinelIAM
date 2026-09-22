@@ -26,6 +26,28 @@ SentinelIAM — це демонстраційний веб-застосунок 
 
 ## 🗺️ Матриця прав доступу (Access Control Matrix)
 
+---
+
+## 📸 Демонстрація
+
+### 🔐 Авторизація та MFA
+
+![SentinelIAM Login](screenshots/img.png)
+
+### 🛡️ IAM Workspace
+
+![SentinelIAM Workspace](screenshots/img_1.png)
+
+### 📊 Security Analytics
+
+![SentinelIAM Security Analytics](screenshots/img_2.png)
+
+### 📝 Audit Logs
+
+![SentinelIAM Audit Logs](screenshots/img_3.png)
+
+---
+
 | Роль користувача | Профіль та MFA (`/api/workspace/profile`) | Метрики безпеки (`/api/workspace/metrics`) | Керування користувачами (`/api/admin/*`) | Зміна ролей користувачів |
 |:---:|:---:|:---:|:---:|:---:|
 | **USER** | ✅ Дозволено | ❌ Заборонено (HTTP 403) | ❌ Заборонено (HTTP 403) | ❌ Заборонено |
